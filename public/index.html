@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poste Italiane Tracking - Premium</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="background-globes">
+        <div class="globe globe-1"></div>
+        <div class="globe globe-2"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-box-open"></i>
+                <span>PosteTrack</span>
+            </div>
+        </header>
+
+        <main>
+            <section class="hero">
+                <h1>Traccia la tua spedizione</h1>
+                <p>Inserisci il codice di tracciamento Poste Italiane o SDA per vedere lo stato in tempo reale.</p>
+                
+                <div class="search-box">
+                    <input type="text" id="trackingCode" placeholder="Es. ZA123456789IT" autocomplete="off">
+                    <button id="trackBtn">
+                        <span class="btn-text">Cerca</span>
+                        <div class="loader" id="btnLoader"></div>
+                    </button>
+                </div>
+                <!-- <p class="example-text">Prova: ZA123456789IT</p> -->
+            </section>
+
+            <section id="results" class="results-container hidden">
+                <div class="status-card">
+                    <div class="status-icon" id="statusIcon">
+                        <i class="fa-solid fa-truck-fast"></i>
+                    </div>
+                    <div class="status-info">
+                        <h2 id="statusTitle">In Transito</h2>
+                        <p id="statusDesc">Il tuo pacco è in viaggio.</p>
+                    </div>
+                </div>
+
+                <div class="timeline" id="timeline">
+                    <!-- Timeline items will be injected here -->
+                </div>
+                
+                <!-- Debug Raw Data View -->
+                <div class="debug-view hidden">
+                    <h3>Raw Data</h3>
+                    <pre id="rawData"></pre>
+                </div>
+            </section>
+
+            <div id="error-message" class="error-message hidden">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span id="errorText">Si è verificato un errore. Riprova.</span>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
