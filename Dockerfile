@@ -1,20 +1,30 @@
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM node:18-slim
 
-# Switch to root to install dependencies and fix permissions
-USER root
+# Install latest chrome dev package and fonts to support major charsets (Chinese, Japanese, Arabic, Hebrew, Thai and a few others)
+# Note: this installs the necessary libs to make the bundled version of Chromium that Puppeteer
+# installs, work.
+RUN apt-get update \
+    && apt-get install -y wget gnupg \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
+    && sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+      --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
+# Create app directory
 WORKDIR /usr/src/app
 
+# Install app dependencies
 COPY package*.json ./
-# Install dependencies (ignoring scripts to avoid trying to download chrome again if not needed, though Env checks that)
+# Install dependencies including puppeteer
 RUN npm install
 
+# Copy app source
 COPY . .
 
-# Ensure pptruser allows writing if needed (e.g. for temporary files), though mostly for reading
-RUN chown -R pptruser:pptruser /usr/src/app
+# Expose port
+EXPOSE 3000
 
-# Switch back to the non-root user for security and to match the base image
-USER pptruser
-
+# Start command
 CMD [ "node", "server.js" ]
