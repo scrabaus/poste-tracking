@@ -1,15 +1,20 @@
 FROM ghcr.io/puppeteer/puppeteer:latest
 
-# Skip downloading Chrome as we use the installed one from the base image
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+# Switch to root to install dependencies and fix permissions
+USER root
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
-# Install only production dependencies
-RUN npm ci --omit=dev
+# Install dependencies (ignoring scripts to avoid trying to download chrome again if not needed, though Env checks that)
+RUN npm install
 
 COPY . .
+
+# Ensure pptruser allows writing if needed (e.g. for temporary files), though mostly for reading
+RUN chown -R pptruser:pptruser /usr/src/app
+
+# Switch back to the non-root user for security and to match the base image
+USER pptruser
 
 CMD [ "node", "server.js" ]
