@@ -52,12 +52,8 @@ function displayResults(data) {
     const statusTitle = document.getElementById('statusTitle');
     const statusDesc = document.getElementById('statusDesc');
     const timeline = document.getElementById('timeline');
-    const rawData = document.getElementById('rawData');
 
     results.classList.remove('hidden');
-
-    // Show raw data for debug
-    rawData.textContent = JSON.stringify(data, null, 2);
 
     // Update Status Card
     statusTitle.textContent = data.status || "Stato Sconosciuto";
