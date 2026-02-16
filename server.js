@@ -10,42 +10,58 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-async function scrapePosteItalianeOrSDA(code) {
-    const browser = await puppeteer.launch({
-        headless: "new",
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+app.get('/api/track/:code', async (req, res) => {
+    const { code } = req.params;
+    console.log(`Tracking request for: ${code}`);
 
+    if (!code) {
+        return res.status(400).json({ error: 'Tracking code is required' });
+    }
+
+    let browser;
     try {
-        // Try Poste Italiane first
-        const posteUrl = `https://www.poste.it/cerca/index.html#/risultati-spedizioni/${code}`;
-        console.log(`Trying Poste Italiane: ${posteUrl}`);
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        const page = await browser.newPage();
 
-        await page.goto(posteUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // Emulate a real browser to avoid detection
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        // Handle Cookie Banner
+        // Poste Italiane DoveQuando URL
+        const url = `https://www.poste.it/cerca/index.html#/risultati-spedizioni/${code}`;
+        console.log(`Navigating to: ${url}`);
+
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+        // Handle Cookie Banner (TrustArc)
         try {
-            await page.waitForSelector('#truste-consent-button', { timeout: 5000 });
-            await page.click('#truste-consent-button');
-            await new Promise(r => setTimeout(r, 5000));
+            const cookieSelector = '#truste-consent-button';
+            try {
+                await page.waitForSelector(cookieSelector, { timeout: 5000 });
+                console.log("Cookie banner found, clicking...");
+                await page.click(cookieSelector);
+                await new Promise(r => setTimeout(r, 5000));
+            } catch (e) {
+                console.log("Cookie banner not found within timeout, skipping.");
+            }
         } catch (e) {
-            console.log("Cookie banner not found, skipping.");
+            console.log("Cookie banner handling error:", e.message);
         }
 
-        // Wait for content
+        // Wait for results to load
         try {
             await page.waitForFunction(
                 () => document.body.innerText.includes('Spedizione') || document.body.innerText.includes('Non disponibile'),
                 { timeout: 15000 }
             );
         } catch (e) {
-            console.log("Timeout waiting for content, proceeding...");
+            console.log("Timeout waiting for 'Spedizione' text, proceeding to scrape...");
         }
 
         // Extract data
-        let data = await page.evaluate(() => {
+        const data = await page.evaluate(() => {
             const bodyText = document.body.innerText;
             let status = "Sconosciuto";
             let timeline = [];
@@ -58,12 +74,10 @@ async function scrapePosteItalianeOrSDA(code) {
             else if (bodyText.includes("Non disponibile")) status = "Non disponibile";
 
             // Extract timeline/history from the page
-            // Look for date patterns and status keywords together
             const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
 
                 // Look for status keywords
                 if (line.match(/^(In transito|In consegna|Consegnat[oa]|Presa in carico|In giacenza)/i)) {
@@ -71,14 +85,14 @@ async function scrapePosteItalianeOrSDA(code) {
                     let eventDate = '';
                     let eventLocation = '';
 
-                    // Try to find date in next few lines (format: "04 Febbraio 2026" or "04 Febbraio 2026 11:44")
+                    // Try to find date in next few lines
                     for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
                         const testLine = lines[j];
                         // Match Italian date format
                         if (testLine.match(/\d{1,2}\s+(Gennaio|Febbraio|Marzo|Aprile|Maggio|Giugno|Luglio|Agosto|Settembre|Ottobre|Novembre|Dicembre)\s+\d{4}/i)) {
                             eventDate = testLine;
                             // Check if there's location info on next line
-                            if (j + 1 < lines.length && lines[j + 1].includes('sede') || lines[j + 1].includes('Centro')) {
+                            if (j + 1 < lines.length && (lines[j + 1].includes('sede') || lines[j + 1].includes('Centro'))) {
                                 eventLocation = lines[j + 1];
                             }
                             break;
@@ -98,75 +112,25 @@ async function scrapePosteItalianeOrSDA(code) {
             return {
                 status: status,
                 timeline: timeline,
-                raw_text: bodyText.substring(0, 5000),
-                source: 'poste'
+                raw_text: bodyText.substring(0, 5000)
             };
         });
 
-        // If Poste didn't work, try SDA
-        if (data.status === "Sconosciuto" || data.status === "Non disponibile") {
-            console.log("Poste didn't return valid tracking, trying SDA...");
-
-            // SDA website tracking
-            const sdaUrl = `https://www.sda.it`;
-            await page.goto(sdaUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-            // Wait for search box and enter code
-            try {
-                await page.waitForSelector('input[name="letteraVettura"]', { timeout: 10000 });
-                await page.type('input[name="letteraVettura"]', code);
-                await page.click('button[type="submit"],input[type="submit"]');
-                await new Promise(r => setTimeout(r, 5000));
-
-                data = await page.evaluate(() => {
-                    const bodyText = document.body.innerText;
-                    let status = "Sconosciuto";
-
-                    if (bodyText.match(/Consegnat[oa]/i)) status = "Consegnato";
-                    else if (bodyText.includes("In consegna")) status = "In consegna";
-                    else if (bodyText.includes("In giacenza")) status = "In giacenza";
-                    else if (bodyText.includes("In transito")) status = "In transito";
-
-                    return {
-                        status: status,
-                        raw_text: bodyText.substring(0, 5000),
-                        source: 'sda'
-                    };
-                });
-            } catch (e) {
-                console.log("SDA tracking failed:", e.message);
-            }
-        }
-
-        await browser.close();
-        return data;
-    } catch (error) {
-        await browser.close();
-        throw error;
-    }
-}
-
-app.get('/api/track/:code', async (req, res) => {
-    const { code } = req.params;
-    console.log(`Tracking request for: ${code}`);
-
-    if (!code) {
-        return res.status(400).json({ error: 'Tracking code is required' });
-    }
-
-    try {
-        const data = await scrapePosteItalianeOrSDA(code);
-
+        // Send back whatever we found
         res.json({
             code,
             status: data.status,
             raw_response: data,
-            message: `Tracking data retrieved from ${data.source}`
+            message: "Tracking data retrieved from Poste Italiane"
         });
 
     } catch (error) {
         console.error('Error tracking package:', error);
         res.status(500).json({ error: 'Failed to track package', details: error.message });
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 });
 
