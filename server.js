@@ -48,15 +48,56 @@ async function scrapePosteItalianeOrSDA(code) {
         let data = await page.evaluate(() => {
             const bodyText = document.body.innerText;
             let status = "Sconosciuto";
+            let timeline = [];
 
+            // Extract main status (priority order)
             if (bodyText.match(/Consegnat[oa]/i)) status = "Consegnato";
             else if (bodyText.includes("In consegna")) status = "In consegna";
             else if (bodyText.includes("In transito")) status = "In transito";
             else if (bodyText.includes("Presa in carico")) status = "Presa in carico";
             else if (bodyText.includes("Non disponibile")) status = "Non disponibile";
 
+            // Extract timeline/history from the page
+            // Look for date patterns and status keywords together
+            const lines = bodyText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+
+                // Look for status keywords
+                if (line.match(/^(In transito|In consegna|Consegnat[oa]|Presa in carico|In giacenza)/i)) {
+                    let eventStatus = line;
+                    let eventDate = '';
+                    let eventLocation = '';
+
+                    // Try to find date in next few lines (format: "04 Febbraio 2026" or "04 Febbraio 2026 11:44")
+                    for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+                        const testLine = lines[j];
+                        // Match Italian date format
+                        if (testLine.match(/\d{1,2}\s+(Gennaio|Febbraio|Marzo|Aprile|Maggio|Giugno|Luglio|Agosto|Settembre|Ottobre|Novembre|Dicembre)\s+\d{4}/i)) {
+                            eventDate = testLine;
+                            // Check if there's location info on next line
+                            if (j + 1 < lines.length && lines[j + 1].includes('sede') || lines[j + 1].includes('Centro')) {
+                                eventLocation = lines[j + 1];
+                            }
+                            break;
+                        }
+                    }
+
+                    if (eventDate || eventStatus) {
+                        timeline.push({
+                            status: eventStatus,
+                            date: eventDate,
+                            location: eventLocation
+                        });
+                    }
+                }
+            }
+
             return {
                 status: status,
+                timeline: timeline,
                 raw_text: bodyText.substring(0, 5000),
                 source: 'poste'
             };

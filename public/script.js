@@ -66,9 +66,22 @@ function displayResults(data) {
     // Clear previous timeline
     timeline.innerHTML = '';
 
-    // Mock timeline if no structured history is available (for demo)
-    // Real implementation would parse data.history array
-    if (data.history && data.history.length > 0) {
+    // Display timeline from server response
+    if (data.raw_response && data.raw_response.timeline && data.raw_response.timeline.length > 0) {
+        data.raw_response.timeline.forEach(event => {
+            const item = document.createElement('div');
+            item.className = 'timeline-item';
+            item.innerHTML = `
+                <div class="timeline-date">${event.date || 'Data N/D'}</div>
+                <div class="timeline-content">
+                    <strong>${event.status}</strong>
+                    ${event.location ? `<br><small>${event.location}</small>` : ''}
+                </div>
+            `;
+            timeline.appendChild(item);
+        });
+    } else if (data.history && data.history.length > 0) {
+        // Fallback for old response format
         data.history.forEach(event => {
             const item = document.createElement('div');
             item.className = 'timeline-item';
@@ -79,12 +92,12 @@ function displayResults(data) {
             timeline.appendChild(item);
         });
     } else {
-        // Fallback for demo when parsing isn't perfect yet
+        // No timeline available
         const item = document.createElement('div');
         item.className = 'timeline-item';
         item.innerHTML = `
-            <div class="timeline-date">Oggi</div>
-            <div class="timeline-content">Informazioni dettagliate non ancora disponibili (Raw Mode)</div>
+            <div class="timeline-date">-</div>
+            <div class="timeline-content">Dettagli cronologia non disponibili</div>
         `;
         timeline.appendChild(item);
     }
